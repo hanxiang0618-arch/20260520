@@ -66,7 +66,7 @@ function draw() {
   push();
   translate(x + videoW, y); // 移到影像區域的右側
   scale(-1, 1);            // 水平翻轉
-  image(capture, x, y, videoW, videoH);
+  image(capture, 0, 0, videoW, videoH); // 在本地座標 (0,0) 繪製即可
   pop();
 
   // 初始化手勢變數，稍後在狀態機中視情況進行偵測
