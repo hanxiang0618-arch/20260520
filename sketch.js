@@ -66,7 +66,7 @@ function draw() {
   push();
   translate(x + videoW, y); // 移到影像區域的右側
   scale(-1, 1);            // 水平翻轉
-  image(capture, 0, 0, videoW, videoH); // 在本地座標 (0,0) 繪製即可
+  image(capture, 0, 0, videoW, videoH); 
   pop();
 
   // 初始化手勢變數，稍後在狀態機中視情況進行偵測
@@ -83,32 +83,39 @@ function draw() {
   textAlign(CENTER, CENTER);
 
   if (gameState === 'SERIES_OVER') {
+    if (predictions.length > 0) {
+      currentGesture = detectGestures(predictions[0]);
+      drawDetectionHUD(currentGesture);
+    }
     textSize(60);
     let winner = playerScore >= 3 ? "🏆 你獲得最終勝利！" : "💀 電腦獲得最終勝利...";
-    fill(playerScore >= 3 ? '#d62828' : '#333');
-    text(winner, width / 2, height / 2);
-    textSize(24);
+    fill(playerScore >= 3 ? '#ff4d6d' : '#4a4e69');
+    text(winner, width / 2, height * 0.5);
+    textSize(28);
     fill(50);
-    text("👍 比讚重新開始系列賽", width / 2, height * 0.85);
-    if (currentGesture === "Thumbs Up") {
+    text("👍 比讚重玩 | ☝️ 食指重置", width / 2, height * 0.85);
+    if (currentGesture === "Thumbs Up" || currentGesture === "Pointing") {
       resetSeries();
     }
   }
   else if (gameState === 'WAITING') {
-    textSize(50);
+    textSize(44);
     if (predictions.length > 0) {
       currentGesture = detectGestures(predictions[0]);
       drawDetectionHUD(currentGesture); // 顯示偵測狀態
     }
-    text("👍 比讚開始遊戲", width / 2, height * 0.15);
-    if (currentGesture === "Thumbs Up") {
+    text("👍 比讚開始 | ☝️ 食指重置", width / 2, height * 0.15);
+    if (currentGesture === "Pointing") {
+      resetSeries();
+    }
+    else if (currentGesture === "Thumbs Up") {
       gameState = 'COUNTING';
       timer = 3;
       lastTick = millis();
     }
   } 
   else if (gameState === 'COUNTING') {
-    textSize(100);
+    textSize(120);
     let elapsed = millis() - lastTick;
     if (timer > 0 && elapsed > 1000) {
       timer--;
@@ -116,15 +123,15 @@ function draw() {
     }
 
     if (timer > 0) {
-      text(timer, width / 2, height / 2);
+      text(timer, width / 2, height * 0.5);
     } else {
       // 倒數結束，此時才開始偵測手勢
       if (predictions.length > 0) {
         currentGesture = detectGestures(predictions[0]);
         drawDetectionHUD(currentGesture);
       }
-      textSize(60);
-      text("請出拳！", width / 2, height / 2);
+      textSize(80);
+      text("🔥 請出拳！", width / 2, height * 0.5);
       if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
         computerChoice = random(['Rock', 'Paper', 'Scissors']);
         playerChoice = currentGesture;
@@ -141,21 +148,24 @@ function draw() {
   else if (gameState === 'RESULT') {
     if (predictions.length > 0) {
       currentGesture = detectGestures(predictions[0]);
+      drawDetectionHUD(currentGesture);
     }
     textSize(40);
     let displayPlayer = translateToChinese(playerChoice);
     let displayComputer = translateToChinese(computerChoice);
     
-    text(`你 [${displayPlayer}]  vs  電腦 [${displayComputer}]`, width / 2, height * 0.15);
-    textSize(70);
-    fill(gameResult === "你贏了！" ? '#d62828' : 50);
-    text(gameResult, width / 2, height / 2);
+    text(`你出：${displayPlayer}  |  電腦：${displayComputer}`, width / 2, height * 0.15);
+    textSize(90);
+    fill(gameResult === "你贏了！" ? '#ff4d6d' : 50);
+    text(gameResult, width / 2, height * 0.5);
     
-    textSize(24);
+    textSize(28);
     fill(50);
-    text("👍 再比一次讚重玩", width / 2, height * 0.85);
+    text("👍 比讚繼續 | ☝️ 食指重置", width / 2, height * 0.85);
     
-    if (currentGesture === "Thumbs Up") {
+    if (currentGesture === "Pointing") {
+      resetSeries();
+    } else if (currentGesture === "Thumbs Up") {
       gameState = 'WAITING';
     }
   }
@@ -166,15 +176,20 @@ function draw() {
 }
 
 function drawDetectionHUD(gesture) {
-  if (gesture === "Rock" || gesture === "Paper" || gesture === "Scissors") {
+  if (gesture) {
     push();
-    fill(0, 100, 255);
-    stroke(0);
-    strokeWeight(2);
-    textSize(24);
-    textAlign(CENTER, TOP);
-    // 確保文字不會超出螢幕
-    text(`目前偵測：${translateToChinese(gesture)}`, width / 2, height * 0.05);
+    rectMode(CENTER);
+    fill(255, 180);
+    noStroke();
+    // 在影像下方顯示一個小標籤
+    rect(width / 2, height * 0.93, 280, 40, 20);
+    
+    fill(74, 78, 105);
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    let txt = gesture === "Thumbs Up" ? "已就緒 👍" : 
+              (gesture === "Pointing" ? "結束重置 ☝️" : `手勢：${translateToChinese(gesture)}`);
+    text(txt, width / 2, height * 0.93);
     pop();
   }
 }
@@ -182,13 +197,16 @@ function drawDetectionHUD(gesture) {
 function drawScoreboard() {
   push();
   rectMode(CENTER);
-  fill(255, 200);
+  // 計分板背景
+  fill(74, 78, 105);
+  rect(width / 2, 40, 350, 50, 0, 0, 15, 15);
+  
+  fill(255);
   noStroke();
-  rect(width / 2, 70, 300, 60, 10);
-  fill(0);
-  textSize(24);
+  textSize(22);
+  textStyle(BOLD);
   textAlign(CENTER, CENTER);
-  text(`玩家 ${playerScore} : ${computerScore} 電腦`, width / 2, 70);
+  text(`PLAYER ${playerScore}  —  COMPUTER ${computerScore}`, width / 2, 38);
   pop();
 }
 
@@ -275,6 +293,7 @@ function translateToChinese(gesture) {
     case "Rock": return "石頭";
     case "Paper": return "布";
     case "Scissors": return "剪刀";
+    case "Pointing": return "伸食指";
     case "Unknown": return "未知";
     default: return "";
   }
