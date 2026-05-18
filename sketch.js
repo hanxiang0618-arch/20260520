@@ -55,6 +55,9 @@ function draw() {
   // 將攝影機影像繪製在畫面上
   image(capture, x, y, videoW, videoH);
 
+  // 辨識手勢並顯示文字
+  detectGestures(x, y, videoW, videoH);
+
   // 畫出手部關節點
   drawLandmarks(x, y, videoW, videoH);
 }
@@ -80,6 +83,53 @@ function drawLandmarks(offsetX, offsetY, videoW, videoH) {
         
         circle(px, py, 8); // 畫出直徑 8 的圓點
       }
+    }
+  }
+}
+
+function detectGestures(offsetX, offsetY, videoW, videoH) {
+  if (predictions.length > 0) {
+    for (let landmarks of predictions) {
+      // 判斷手指是否伸直 (在 MediaPipe 中，Y 座標 0 為頂部，1 為底部)
+      // 邏輯：指尖的 Y 比第二關節的 Y 小，代表手指向上伸出
+      let indexOpen = landmarks[8].y < landmarks[6].y;
+      let middleOpen = landmarks[12].y < landmarks[10].y;
+      let ringOpen = landmarks[16].y < landmarks[14].y;
+      let pinkyOpen = landmarks[20].y < landmarks[18].y;
+
+      // 拇指伸開判斷：判斷指尖到食指根部(5)的距離是否大於關節到食指根部的距離
+      let thumbOpen = dist(landmarks[4].x, landmarks[4].y, landmarks[5].x, landmarks[5].y) > 
+                      dist(landmarks[3].x, landmarks[3].y, landmarks[5].x, landmarks[5].y);
+
+      let gesture = "";
+
+      // 1. 布 (Paper): 四指皆開
+      if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
+        gesture = "布 (Paper)";
+      } 
+      // 2. 剪刀 (Scissors): 食中開，無名小指關
+      else if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
+        gesture = "剪刀 (Scissors)";
+      } 
+      // 3. 伸食指 (Pointing): 僅食指開
+      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+        gesture = "伸食指 (Pointing)";
+      } 
+      // 4. 當四指都握住時
+      else if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+        // 檢查大拇指是否向上 (比讚)
+        if (landmarks[4].y < landmarks[3].y && landmarks[4].y < landmarks[2].y) {
+          gesture = "比讚 (Thumbs Up)";
+        } else {
+          gesture = "石頭 (Rock)";
+        }
+      }
+
+      // 在手腕位置上方顯示辨識結果
+      fill(255, 0, 0);
+      textSize(32);
+      textAlign(CENTER);
+      text(gesture, landmarks[0].x * videoW + offsetX, landmarks[0].y * videoH + offsetY + 40);
     }
   }
 }
