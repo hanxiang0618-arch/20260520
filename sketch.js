@@ -62,49 +62,31 @@ function draw() {
   let x = (width - videoW) / 2;
   let y = (height - videoH) / 2;
   
-  // --- 鏡像處理攝影機影像 ---
+  // --- 繪製攝影機裝飾框 ---
+  noFill();
+  stroke(255, 150);
+  strokeWeight(4);
+  rect(x - 5, y - 5, videoW + 10, videoH + 10, 15);
+
+  // --- 鏡像處理並繪製影像 ---
   push();
   translate(x + videoW, y); // 移到影像區域的右側
   scale(-1, 1);            // 水平翻轉
+  drawingContext.clip();    // 讓影像也符合圓角矩形
   image(capture, 0, 0, videoW, videoH); 
   pop();
 
   // 初始化手勢變數，稍後在狀態機中視情況進行偵測
   let currentGesture = "";
   
-  // --- 畫出計分板 ---
-  drawScoreboard();
-
   // 遊戲邏輯狀態機
-  push();
-  fill(50);
-  stroke(0);
-  strokeWeight(2);
-  textAlign(CENTER, CENTER);
-
   if (gameState === 'SERIES_OVER') {
-    if (predictions.length > 0) {
-      currentGesture = detectGestures(predictions[0]);
-      drawDetectionHUD(currentGesture);
-    }
-    textSize(60);
-    let winner = playerScore >= 3 ? "🏆 你獲得最終勝利！" : "💀 電腦獲得最終勝利...";
-    fill(playerScore >= 3 ? '#ff4d6d' : '#4a4e69');
-    text(winner, width / 2, height * 0.5);
-    textSize(28);
-    fill(50);
-    text("👍 比讚重玩 | ☝️ 食指重置", width / 2, height * 0.85);
-    if (currentGesture === "Thumbs Up" || currentGesture === "Pointing") {
-      resetSeries();
-    }
+    drawGameOverScreen(detectCurrentGesture());
   }
   else if (gameState === 'WAITING') {
-    textSize(44);
-    if (predictions.length > 0) {
-      currentGesture = detectGestures(predictions[0]);
-      drawDetectionHUD(currentGesture); // 顯示偵測狀態
-    }
-    text("👍 比讚開始 | ☝️ 食指重置", width / 2, height * 0.15);
+    currentGesture = detectCurrentGesture();
+    drawStartScreen(currentGesture);
+    
     if (currentGesture === "Pointing") {
       resetSeries();
     }
@@ -115,6 +97,12 @@ function draw() {
     }
   } 
   else if (gameState === 'COUNTING') {
+    drawScoreboard();
+    push();
+    fill(50);
+    stroke(255);
+    strokeWeight(2);
+    textAlign(CENTER, CENTER);
     textSize(120);
     let elapsed = millis() - lastTick;
     if (timer > 0 && elapsed > 1000) {
@@ -126,10 +114,8 @@ function draw() {
       text(timer, width / 2, height * 0.5);
     } else {
       // 倒數結束，此時才開始偵測手勢
-      if (predictions.length > 0) {
-        currentGesture = detectGestures(predictions[0]);
-        drawDetectionHUD(currentGesture);
-      }
+      currentGesture = detectCurrentGesture();
+      drawDetectionHUD(currentGesture);
       textSize(80);
       text("🔥 請出拳！", width / 2, height * 0.5);
       if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
@@ -144,12 +130,15 @@ function draw() {
         gameState = playerScore >= 3 || computerScore >= 3 ? 'SERIES_OVER' : 'RESULT';
       }
     }
+    pop();
   } 
   else if (gameState === 'RESULT') {
-    if (predictions.length > 0) {
-      currentGesture = detectGestures(predictions[0]);
-      drawDetectionHUD(currentGesture);
-    }
+    drawScoreboard();
+    currentGesture = detectCurrentGesture();
+    drawDetectionHUD(currentGesture);
+
+    push();
+    textAlign(CENTER, CENTER);
     textSize(40);
     let displayPlayer = translateToChinese(playerChoice);
     let displayComputer = translateToChinese(computerChoice);
@@ -168,11 +157,84 @@ function draw() {
     } else if (currentGesture === "Thumbs Up") {
       gameState = 'WAITING';
     }
+    pop();
   }
-  pop();
 
   // 畫出手部關節點
   drawLandmarks(x, y, videoW, videoH);
+}
+
+function detectCurrentGesture() {
+  if (predictions.length > 0) {
+    return detectGestures(predictions[0]);
+  }
+  return "";
+}
+
+function drawStartScreen(currentGesture) {
+  // 背景裝飾
+  fill(255, 100);
+  noStroke();
+  rect(0, 0, width, height * 0.25);
+  rect(0, height * 0.75, width, height * 0.25);
+
+  // 標題
+  push();
+  drawingContext.shadowBlur = 15;
+  drawingContext.shadowColor = 'rgba(0,0,0,0.3)';
+  fill(50);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(60);
+  text("手勢大戰：五戰三勝", width / 2, height * 0.12);
+  pop();
+
+  // 指南
+  fill(80);
+  textSize(24);
+  textAlign(CENTER, CENTER);
+  text("準備好後比出 👍 開始倒數", width / 2, height * 0.82);
+  textSize(18);
+  text("遊戲中比出 ☝️ 可隨時重置分數", width / 2, height * 0.88);
+
+  drawDetectionHUD(currentGesture);
+}
+
+function drawGameOverScreen(currentGesture) {
+  let isWin = playerScore >= 3;
+  
+  // 全屏遮罩
+  fill(isWin ? 'rgba(255, 234, 167, 0.9)' : 'rgba(45, 52, 54, 0.9)');
+  rect(0, 0, width, height);
+
+  push();
+  textAlign(CENTER, CENTER);
+  drawingContext.shadowBlur = 20;
+  drawingContext.shadowColor = isWin ? 'rgba(255, 118, 117, 0.5)' : 'black';
+
+  // 大標題
+  textStyle(BOLD);
+  textSize(80);
+  fill(isWin ? '#d63031' : '#dfe6e9');
+  text(isWin ? "VICTORY !" : "GAME OVER", width / 2, height * 0.4);
+  
+  // 小標題
+  textSize(32);
+  fill(isWin ? 50 : 200);
+  let subTxt = isWin ? "🏆 你是最終贏家" : "💀 電腦贏得系列賽";
+  text(subTxt, width / 2, height * 0.52);
+
+  // 重玩指令
+  textSize(24);
+  fill(isWin ? 100 : 150);
+  text("👍 比讚重玩 | ☝️ 食指重置", width / 2, height * 0.85);
+  pop();
+
+  if (currentGesture === "Thumbs Up" || currentGesture === "Pointing") {
+    resetSeries();
+  }
+  
+  drawDetectionHUD(currentGesture);
 }
 
 function drawDetectionHUD(gesture) {
