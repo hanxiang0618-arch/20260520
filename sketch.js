@@ -2,6 +2,14 @@ let capture;
 let hands;
 let predictions = []; // 儲存偵測到的手部資料
 
+// 遊戲變數
+let gameState = 'WAITING'; // WAITING, COUNTING, RESULT
+let timer = 3;
+let lastTick = 0;
+let playerChoice = "";
+let computerChoice = "";
+let gameResult = "";
+
 function setup() {
   // 建立全螢幕畫布
   createCanvas(windowWidth, windowHeight);
@@ -55,8 +63,63 @@ function draw() {
   // 將攝影機影像繪製在畫面上
   image(capture, x, y, videoW, videoH);
 
-  // 辨識手勢並顯示文字
-  detectGestures(x, y, videoW, videoH);
+  // 取得目前偵測到的手勢
+  let currentGesture = "";
+  if (predictions.length > 0) {
+    currentGesture = detectGestures(predictions[0]);
+  }
+
+  // 遊戲邏輯狀態機
+  push();
+  fill(255);
+  stroke(0);
+  strokeWeight(4);
+  textSize(60);
+  textAlign(CENTER, CENTER);
+
+  if (gameState === 'WAITING') {
+    text("👍 比讚開始遊戲", width / 2, height * 0.15);
+    if (currentGesture === "Thumbs Up") {
+      gameState = 'COUNTING';
+      timer = 3;
+      lastTick = millis();
+    }
+  } 
+  else if (gameState === 'COUNTING') {
+    let elapsed = millis() - lastTick;
+    if (elapsed > 1000) {
+      timer--;
+      lastTick = millis();
+    }
+    if (timer > 0) {
+      text(timer, width / 2, height / 2);
+    } else {
+      // 時間到，判定勝負
+      computerChoice = random(['Rock', 'Paper', 'Scissors']);
+      playerChoice = (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") ? currentGesture : "Unknown";
+      gameResult = judge(playerChoice, computerChoice);
+      gameState = 'RESULT';
+    }
+  } 
+  else if (gameState === 'RESULT') {
+    textSize(40);
+    let displayPlayer = translateToChinese(playerChoice);
+    let displayComputer = translateToChinese(computerChoice);
+    
+    text(`你出: ${displayPlayer}  vs  電腦出: ${displayComputer}`, width / 2, height * 0.15);
+    textSize(80);
+    fill(gameResult === "你贏了！" ? '#ff0000' : 255);
+    text(gameResult, width / 2, height / 2);
+    
+    textSize(30);
+    fill(255);
+    text("👍 再比一次讚重玩", width / 2, height * 0.85);
+    
+    if (currentGesture === "Thumbs Up") {
+      gameState = 'WAITING';
+    }
+  }
+  pop();
 
   // 畫出手部關節點
   drawLandmarks(x, y, videoW, videoH);
@@ -87,50 +150,66 @@ function drawLandmarks(offsetX, offsetY, videoW, videoH) {
   }
 }
 
-function detectGestures(offsetX, offsetY, videoW, videoH) {
-  if (predictions.length > 0) {
-    for (let landmarks of predictions) {
-      // 判斷手指是否伸直 (在 MediaPipe 中，Y 座標 0 為頂部，1 為底部)
-      // 邏輯：指尖的 Y 比第二關節的 Y 小，代表手指向上伸出
-      let indexOpen = landmarks[8].y < landmarks[6].y;
-      let middleOpen = landmarks[12].y < landmarks[10].y;
-      let ringOpen = landmarks[16].y < landmarks[14].y;
-      let pinkyOpen = landmarks[20].y < landmarks[18].y;
+function detectGestures(landmarks) {
+  // 判斷手指是否伸直 (在 MediaPipe 中，Y 座標 0 為頂部，1 為底部)
+  // 邏輯：指尖的 Y 比第二關節的 Y 小，代表手指向上伸出
+  let indexOpen = landmarks[8].y < landmarks[6].y;
+  let middleOpen = landmarks[12].y < landmarks[10].y;
+  let ringOpen = landmarks[16].y < landmarks[14].y;
+  let pinkyOpen = landmarks[20].y < landmarks[18].y;
 
-      // 拇指伸開判斷：判斷指尖到食指根部(5)的距離是否大於關節到食指根部的距離
-      let thumbOpen = dist(landmarks[4].x, landmarks[4].y, landmarks[5].x, landmarks[5].y) > 
-                      dist(landmarks[3].x, landmarks[3].y, landmarks[5].x, landmarks[5].y);
+  // 拇指伸開判斷
+  let thumbOpen = dist(landmarks[4].x, landmarks[4].y, landmarks[5].x, landmarks[5].y) > 
+                  dist(landmarks[3].x, landmarks[3].y, landmarks[5].x, landmarks[5].y);
 
-      let gesture = "";
-
-      // 1. 布 (Paper): 四指皆開
-      if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
-        gesture = "布 (Paper)";
-      } 
-      // 2. 剪刀 (Scissors): 食中開，無名小指關
-      else if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
-        gesture = "剪刀 (Scissors)";
-      } 
-      // 3. 伸食指 (Pointing): 僅食指開
-      else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
-        gesture = "伸食指 (Pointing)";
-      } 
-      // 4. 當四指都握住時
-      else if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
-        // 檢查大拇指是否向上 (比讚)
-        if (landmarks[4].y < landmarks[3].y && landmarks[4].y < landmarks[2].y) {
-          gesture = "比讚 (Thumbs Up)";
-        } else {
-          gesture = "石頭 (Rock)";
-        }
-      }
-
-      // 在手腕位置上方顯示辨識結果
-      fill(255, 0, 0);
-      textSize(32);
-      textAlign(CENTER);
-      text(gesture, landmarks[0].x * videoW + offsetX, landmarks[0].y * videoH + offsetY + 40);
+  // 1. 布 (Paper): 四指皆開
+  if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
+    return "Paper";
+  } 
+  // 2. 剪刀 (Scissors): 食中開，無名小指關
+  else if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
+    return "Scissors";
+  } 
+  // 3. 伸食指 (Pointing): 僅食指開
+  else if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+    return "Pointing";
+  } 
+  // 4. 當四指都握住時
+  else if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+    // 檢查大拇指是否向上 (比讚)
+    if (landmarks[4].y < landmarks[3].y && landmarks[4].y < landmarks[2].y) {
+      return "Thumbs Up";
+    } else {
+      return "Rock";
     }
+  }
+  return "";
+}
+
+// 勝負判定
+function judge(p, c) {
+  if (p === "Unknown") return "沒偵測到出手！";
+  if (p === c) return "平手 (Tie)";
+  
+  if (
+    (p === "Rock" && c === "Scissors") ||
+    (p === "Paper" && c === "Rock") ||
+    (p === "Scissors" && c === "Paper")
+  ) {
+    return "你贏了！";
+  } else {
+    return "你輸了...";
+  }
+}
+
+// 輔助文字翻譯
+function translateToChinese(gesture) {
+  switch(gesture) {
+    case "Rock": return "石頭";
+    case "Paper": return "布";
+    case "Scissors": return "剪刀";
+    case "Unknown": return "未知";
+    default: return "";
   }
 }
 
