@@ -69,26 +69,11 @@ function draw() {
   image(capture, x, y, videoW, videoH);
   pop();
 
-  // 取得目前偵測到的手勢
+  // 初始化手勢變數，稍後在狀態機中視情況進行偵測
   let currentGesture = "";
-  if (predictions.length > 0) {
-    currentGesture = detectGestures(predictions[0]);
-  }
   
   // --- 畫出計分板 ---
   drawScoreboard();
-
-  // 在螢幕正上方即時顯示目前偵測到的出拳手勢
-  if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
-    push();
-    fill(0, 100, 255);
-    stroke(0);
-    strokeWeight(2);
-    textSize(24);
-    textAlign(CENTER, TOP);
-    text(`目前偵測：${translateToChinese(currentGesture)}`, width / 2, height * 0.05);
-    pop();
-  }
 
   // 遊戲邏輯狀態機
   push();
@@ -111,6 +96,10 @@ function draw() {
   }
   else if (gameState === 'WAITING') {
     textSize(50);
+    if (predictions.length > 0) {
+      currentGesture = detectGestures(predictions[0]);
+      drawDetectionHUD(currentGesture); // 顯示偵測狀態
+    }
     text("👍 比讚開始遊戲", width / 2, height * 0.15);
     if (currentGesture === "Thumbs Up") {
       gameState = 'COUNTING';
@@ -129,6 +118,11 @@ function draw() {
     if (timer > 0) {
       text(timer, width / 2, height / 2);
     } else {
+      // 倒數結束，此時才開始偵測手勢
+      if (predictions.length > 0) {
+        currentGesture = detectGestures(predictions[0]);
+        drawDetectionHUD(currentGesture);
+      }
       textSize(60);
       text("請出拳！", width / 2, height / 2);
       if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
@@ -145,6 +139,9 @@ function draw() {
     }
   } 
   else if (gameState === 'RESULT') {
+    if (predictions.length > 0) {
+      currentGesture = detectGestures(predictions[0]);
+    }
     textSize(40);
     let displayPlayer = translateToChinese(playerChoice);
     let displayComputer = translateToChinese(computerChoice);
@@ -166,6 +163,20 @@ function draw() {
 
   // 畫出手部關節點
   drawLandmarks(x, y, videoW, videoH);
+}
+
+function drawDetectionHUD(gesture) {
+  if (gesture === "Rock" || gesture === "Paper" || gesture === "Scissors") {
+    push();
+    fill(0, 100, 255);
+    stroke(0);
+    strokeWeight(2);
+    textSize(24);
+    textAlign(CENTER, TOP);
+    // 確保文字不會超出螢幕
+    text(`目前偵測：${translateToChinese(gesture)}`, width / 2, height * 0.05);
+    pop();
+  }
 }
 
 function drawScoreboard() {
