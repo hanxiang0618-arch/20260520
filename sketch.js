@@ -3,12 +3,14 @@ let hands;
 let predictions = []; // 儲存偵測到的手部資料
 
 // 遊戲變數
-let gameState = 'WAITING'; // WAITING, COUNTING, RESULT
+let gameState = 'WAITING'; // WAITING, COUNTING, RESULT, SERIES_OVER
 let timer = 3;
 let lastTick = 0;
 let playerChoice = "";
 let computerChoice = "";
 let gameResult = "";
+let playerScore = 0;
+let computerScore = 0;
 
 function setup() {
   // 建立全螢幕畫布
@@ -60,24 +62,55 @@ function draw() {
   let x = (width - videoW) / 2;
   let y = (height - videoH) / 2;
   
-  // 將攝影機影像繪製在畫面上
+  // --- 鏡像處理攝影機影像 ---
+  push();
+  translate(x + videoW, y); // 移到影像區域的右側
+  scale(-1, 1);            // 水平翻轉
   image(capture, x, y, videoW, videoH);
+  pop();
 
   // 取得目前偵測到的手勢
   let currentGesture = "";
   if (predictions.length > 0) {
     currentGesture = detectGestures(predictions[0]);
   }
+  
+  // --- 畫出計分板 ---
+  drawScoreboard();
+
+  // 在螢幕正上方即時顯示目前偵測到的出拳手勢
+  if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
+    push();
+    fill(0, 100, 255);
+    stroke(0);
+    strokeWeight(2);
+    textSize(24);
+    textAlign(CENTER, TOP);
+    text(`目前偵測：${translateToChinese(currentGesture)}`, width / 2, height * 0.05);
+    pop();
+  }
 
   // 遊戲邏輯狀態機
   push();
-  fill(255);
+  fill(50);
   stroke(0);
-  strokeWeight(4);
-  textSize(60);
+  strokeWeight(2);
   textAlign(CENTER, CENTER);
 
-  if (gameState === 'WAITING') {
+  if (gameState === 'SERIES_OVER') {
+    textSize(60);
+    let winner = playerScore >= 3 ? "🏆 你獲得最終勝利！" : "💀 電腦獲得最終勝利...";
+    fill(playerScore >= 3 ? '#d62828' : '#333');
+    text(winner, width / 2, height / 2);
+    textSize(24);
+    fill(50);
+    text("👍 比讚重新開始系列賽", width / 2, height * 0.85);
+    if (currentGesture === "Thumbs Up") {
+      resetSeries();
+    }
+  }
+  else if (gameState === 'WAITING') {
+    textSize(50);
     text("👍 比讚開始遊戲", width / 2, height * 0.15);
     if (currentGesture === "Thumbs Up") {
       gameState = 'COUNTING';
@@ -86,19 +119,29 @@ function draw() {
     }
   } 
   else if (gameState === 'COUNTING') {
+    textSize(100);
     let elapsed = millis() - lastTick;
-    if (elapsed > 1000) {
+    if (timer > 0 && elapsed > 1000) {
       timer--;
       lastTick = millis();
     }
+
     if (timer > 0) {
       text(timer, width / 2, height / 2);
     } else {
-      // 時間到，判定勝負
-      computerChoice = random(['Rock', 'Paper', 'Scissors']);
-      playerChoice = (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") ? currentGesture : "Unknown";
-      gameResult = judge(playerChoice, computerChoice);
-      gameState = 'RESULT';
+      textSize(60);
+      text("請出拳！", width / 2, height / 2);
+      if (currentGesture === "Rock" || currentGesture === "Paper" || currentGesture === "Scissors") {
+        computerChoice = random(['Rock', 'Paper', 'Scissors']);
+        playerChoice = currentGesture;
+        gameResult = judge(playerChoice, computerChoice);
+        
+        // 更新分數
+        if (gameResult === "你贏了！") playerScore++;
+        if (gameResult === "你輸了...") computerScore++;
+        
+        gameState = playerScore >= 3 || computerScore >= 3 ? 'SERIES_OVER' : 'RESULT';
+      }
     }
   } 
   else if (gameState === 'RESULT') {
@@ -106,13 +149,13 @@ function draw() {
     let displayPlayer = translateToChinese(playerChoice);
     let displayComputer = translateToChinese(computerChoice);
     
-    text(`你出: ${displayPlayer}  vs  電腦出: ${displayComputer}`, width / 2, height * 0.15);
-    textSize(80);
-    fill(gameResult === "你贏了！" ? '#ff0000' : 255);
+    text(`你 [${displayPlayer}]  vs  電腦 [${displayComputer}]`, width / 2, height * 0.15);
+    textSize(70);
+    fill(gameResult === "你贏了！" ? '#d62828' : 50);
     text(gameResult, width / 2, height / 2);
     
-    textSize(30);
-    fill(255);
+    textSize(24);
+    fill(50);
     text("👍 再比一次讚重玩", width / 2, height * 0.85);
     
     if (currentGesture === "Thumbs Up") {
@@ -123,6 +166,19 @@ function draw() {
 
   // 畫出手部關節點
   drawLandmarks(x, y, videoW, videoH);
+}
+
+function drawScoreboard() {
+  push();
+  rectMode(CENTER);
+  fill(255, 200);
+  noStroke();
+  rect(width / 2, 70, 300, 60, 10);
+  fill(0);
+  textSize(24);
+  textAlign(CENTER, CENTER);
+  text(`玩家 ${playerScore} : ${computerScore} 電腦`, width / 2, 70);
+  pop();
 }
 
 function onResults(results) {
@@ -140,8 +196,8 @@ function drawLandmarks(offsetX, offsetY, videoW, videoH) {
         let pt = landmarks[i];
         
         // MediaPipe 的座標是 0~1 的比例，需要映射到我們顯示的 60% 區塊
-        // 注意：攝影機影像通常是水平反轉的，若需要鏡像請調整 mapping
-        let px = pt.x * videoW + offsetX;
+        // 因為影像鏡像了，所以 x 座標要用 (1 - pt.x) 來映射
+        let px = (1 - pt.x) * videoW + offsetX;
         let py = pt.y * videoH + offsetY;
         
         circle(px, py, 8); // 畫出直徑 8 的圓點
@@ -211,6 +267,12 @@ function translateToChinese(gesture) {
     case "Unknown": return "未知";
     default: return "";
   }
+}
+
+function resetSeries() {
+  playerScore = 0;
+  computerScore = 0;
+  gameState = 'WAITING';
 }
 
 // 當視窗縮放時，自動調整畫布大小以維持全螢幕
